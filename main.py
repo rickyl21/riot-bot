@@ -5,12 +5,18 @@ import discord
 from discord import Intents, Client, Message
 from discord import app_commands
 from discord.ext import commands
+from get_profile_icon import get_profile_icon
 from responses import get_response
 import httpx
+
+
+from summoner import Summoner
 
 load_dotenv()
 TOKEN: Final[str] = os.getenv('DISCORD_TOKEN')
 API_KEY: Final[str] = os.getenv('RIOT_API_KEY')
+DDRAGON_VER = httpx.get(
+    "https://ddragon.leagueoflegends.com/api/versions.json").json()[0]
 
 intents: Intents = Intents.default()
 intents.message_content = True
@@ -46,6 +52,11 @@ async def on_ready() -> None:
     except Exception as e:
         print(e)
 
+    try:
+        print(DDRAGON_VER)
+    except Exception as e:
+        print(e)
+
 
 @client.event
 async def on_message(message: Message) -> None:
@@ -71,9 +82,26 @@ async def opgg(interaction: discord.Interaction, username: str, tagline: str):
     summonerResponse = httpx.get(
         f"https://na1.api.riotgames.com/lol/summoner/v4/summoners/by-puuid/{puuid}?api_key={API_KEY}")
     summonerBody = summonerResponse.json()
-    print(summonerBody)
 
-    await interaction.response.send_message(f"{summonerBody}")
+    riotId = username + "#" + tagline
+    profile_icon_id = summonerBody["profileIconId"]
+    profile_icon_url = f"https://ddragon.leagueoflegends.com/cdn/{
+        DDRAGON_VER}/img/profileicon/{profile_icon_id}.png"
+    # profileIcon = await get_profile_icon(ddragon_ver=DDRAGON_VER, profile_icon_id=profileIconId)
+
+    summoner = Summoner(summonerBody["id"], summonerBody["accountId"], summonerBody["puuid"],
+                        summonerBody["profileIconId"], summonerBody["revisionDate"], summonerBody["summonerLevel"],
+                        riotId)
+
+    embed = discord.Embed(
+        title=f"{summoner.riot_id}",
+        description=f"Level: {summoner.summoner_level}",
+        color=discord.Color.blue()
+    )
+    embed.set_thumbnail(url=profile_icon_url)
+    embed.set_footer(text="Profile Icon")
+
+    await interaction.response.send_message(embed=embed)
 
 
 def main() -> None:
