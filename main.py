@@ -76,18 +76,19 @@ async def on_message(message: Message) -> None:
 @client.tree.command(name="opgg")
 @app_commands.describe(username="Riot Username", tagline="#NA1")
 async def opgg(interaction: discord.Interaction, username: str, tagline: str = "NA1"):
-    accountBody = await account_api.get_account_by_riot_id(username, tagline)
-    puuid: str = accountBody["puuid"]
-    summonerBody = await lol_api.get_summoner_by_puuid(puuid)
+    account_body = await account_api.get_account_by_riot_id(username, tagline)
+    puuid: str = account_body["puuid"]
+    summoner_body = await lol_api.get_summoner_by_puuid(puuid)
+    
 
-    riotId = username + "#" + tagline
-    profile_icon_id = summonerBody["profileIconId"]
+    riot_id = username + "#" + tagline
+    profile_icon_id = summoner_body["profileIconId"]
     profile_icon_url = f"https://ddragon.leagueoflegends.com/cdn/{
         DDRAGON_VER}/img/profileicon/{profile_icon_id}.png"
 
-    summoner = Summoner(summonerBody["id"], summonerBody["accountId"], summonerBody["puuid"],
-                        summonerBody["profileIconId"], summonerBody["revisionDate"], summonerBody["summonerLevel"],
-                        riotId)
+    summoner = Summoner(summoner_body["id"], summoner_body["accountId"], summoner_body["puuid"],
+                        summoner_body["profileIconId"], summoner_body["revisionDate"], summoner_body["summonerLevel"],
+                        riot_id)
 
     embed = discord.Embed(
         title=f"{summoner.riot_id}",

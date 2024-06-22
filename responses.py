@@ -8,4 +8,4 @@ def get_response(user_input: str) -> str:
     elif lowered == 'opgg':
         return "OPGG"
     else:
-        return "okay"
+        return "william is gay"

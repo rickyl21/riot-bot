@@ -26,3 +26,10 @@ class RiotAPI:
             response = await client.get(url, headers=self._get_headers())
             response.raise_for_status()
             return response.json()
+        
+    async def get_champion_master_by_puuid(self, puuid: str) -> Dict[str, Any]:
+        url = f"{self.base_url}/lol/champion-mastery/v4/champion-masteries/by-puuid/{puuid}"
+        async with httpx.AsyncClient() as client:
+            response = await client.get(url, headers=self._get_headers())
+            response.raise_for_status()
+            return response.json()
