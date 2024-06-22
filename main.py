@@ -1,15 +1,14 @@
-from typing import Final
 import os
-from dotenv import load_dotenv
+import httpx
 import discord
-from discord import Intents, Client, Message
+
+from typing import Final
+from dotenv import load_dotenv
+from discord import Intents, Message
 from discord import app_commands
 from discord.ext import commands
-from get_profile_icon import get_profile_icon
 from responses import get_response
-import httpx
-
-
+from riot_api import RiotAPI
 from summoner import Summoner
 
 load_dotenv()
@@ -23,6 +22,9 @@ intents.message_content = True
 intents.members = True  # Enable members intent
 intents.presences = True  # Enable presence intent
 client = commands.Bot(command_prefix="!", intents=intents)
+
+account_api = RiotAPI(api_key=API_KEY, region="americas")
+lol_api = RiotAPI(api_key=API_KEY)
 
 
 async def send_message(message: Message, user_message: str) -> None:
@@ -73,21 +75,15 @@ async def on_message(message: Message) -> None:
 
 @client.tree.command(name="opgg")
 @app_commands.describe(username="Riot Username", tagline="#NA1")
-async def opgg(interaction: discord.Interaction, username: str, tagline: str):
-    # await interaction.response.send_message(f"{username}#{tagline}")
-    accountResponse = httpx.get(
-        f"https://americas.api.riotgames.com/riot/account/v1/accounts/by-riot-id/{username}/{tagline}?api_key={API_KEY}")
-    accountBody = accountResponse.json()
+async def opgg(interaction: discord.Interaction, username: str, tagline: str = "NA1"):
+    accountBody = await account_api.get_account_by_riot_id(username, tagline)
     puuid: str = accountBody["puuid"]
-    summonerResponse = httpx.get(
-        f"https://na1.api.riotgames.com/lol/summoner/v4/summoners/by-puuid/{puuid}?api_key={API_KEY}")
-    summonerBody = summonerResponse.json()
+    summonerBody = await lol_api.get_summoner_by_puuid(puuid)
 
     riotId = username + "#" + tagline
     profile_icon_id = summonerBody["profileIconId"]
     profile_icon_url = f"https://ddragon.leagueoflegends.com/cdn/{
         DDRAGON_VER}/img/profileicon/{profile_icon_id}.png"
-    # profileIcon = await get_profile_icon(ddragon_ver=DDRAGON_VER, profile_icon_id=profileIconId)
 
     summoner = Summoner(summonerBody["id"], summonerBody["accountId"], summonerBody["puuid"],
                         summonerBody["profileIconId"], summonerBody["revisionDate"], summonerBody["summonerLevel"],
