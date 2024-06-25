@@ -21,7 +21,7 @@ intents: Intents = Intents.default()
 intents.message_content = True
 intents.members = True  # Enable members intent
 intents.presences = True  # Enable presence intent
-client = commands.Bot(command_prefix="!", intents=intents)
+client = commands.Bot(command_prefix="?", intents=intents)
 
 account_api = RiotAPI(api_key=API_KEY, region="americas")
 lol_api = RiotAPI(api_key=API_KEY)
@@ -32,7 +32,7 @@ async def send_message(message: Message, user_message: str) -> None:
         print('(Message was empty because intents were not enabled probably)')
         return
 
-    if is_private := user_message[0] == '?':
+    if is_private := user_message[0] == '!':
         user_message = user_message[1:]
 
     try:
@@ -64,6 +64,9 @@ async def on_ready() -> None:
 async def on_message(message: Message) -> None:
     if message.author == client.user:
         return
+    
+    if not message.content.startswith(client.command_prefix):
+        return
 
     username: str = str(message.author)
     user_message: str = message.content
@@ -71,34 +74,45 @@ async def on_message(message: Message) -> None:
 
     print(f'[{channel}] {username}: "{user_message}"')
     await send_message(message, user_message)
+    
+    # Ensure commands are processed
+    await client.process_commands(message)
+
 
 
 @client.tree.command(name="opgg")
 @app_commands.describe(username="Riot Username", tagline="#NA1")
 async def opgg(interaction: discord.Interaction, username: str, tagline: str = "NA1"):
-    account_body = await account_api.get_account_by_riot_id(username, tagline)
-    puuid: str = account_body["puuid"]
-    summoner_body = await lol_api.get_summoner_by_puuid(puuid)
-    
+    try:
+        account_body = await account_api.get_account_by_riot_id(username, tagline)
+        puuid: str = account_body["puuid"]
+        summoner_body = await lol_api.get_summoner_by_puuid(puuid)
+        mastery_body = await lol_api.get_champion_master_by_puuid(puuid)
+        print(mastery_body)
+        
 
-    riot_id = username + "#" + tagline
-    profile_icon_id = summoner_body["profileIconId"]
-    profile_icon_url = f"https://ddragon.leagueoflegends.com/cdn/{
-        DDRAGON_VER}/img/profileicon/{profile_icon_id}.png"
+        riot_id = username + "#" + tagline
+        profile_icon_id = summoner_body["profileIconId"]
+        profile_icon_url = f"https://ddragon.leagueoflegends.com/cdn/{
+            DDRAGON_VER}/img/profileicon/{profile_icon_id}.png"
 
-    summoner = Summoner(summoner_body["id"], summoner_body["accountId"], summoner_body["puuid"],
-                        summoner_body["profileIconId"], summoner_body["revisionDate"], summoner_body["summonerLevel"],
-                        riot_id)
+        summoner = Summoner(summoner_body["id"], summoner_body["accountId"], summoner_body["puuid"],
+                            summoner_body["profileIconId"], summoner_body["revisionDate"], summoner_body["summonerLevel"],
+                            riot_id)
 
-    embed = discord.Embed(
-        title=f"{summoner.riot_id}",
-        description=f"Level: {summoner.summoner_level}",
-        color=discord.Color.blue()
-    )
-    embed.set_thumbnail(url=profile_icon_url)
-    embed.set_footer(text="Profile Icon")
+        embed = discord.Embed(
+            title=f"{summoner.riot_id}",
+            description=f"Level: {summoner.summoner_level}",
+            color=discord.Color.blue()
+        )
+        embed.set_thumbnail(url=profile_icon_url)
+        embed.set_footer(text="Profile Icon")
 
-    await interaction.response.send_message(embed=embed)
+        await interaction.response.send_message(embed=embed)
+    except httpx.HTTPStatusError as e:
+        await interaction.response.send_message(f"Error fetching summoner data")
+        print(e)
+
 
 
 def main() -> None:
