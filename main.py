@@ -16,6 +16,7 @@ TOKEN: Final[str] = os.getenv('DISCORD_TOKEN')
 API_KEY: Final[str] = os.getenv('RIOT_API_KEY')
 DDRAGON_VER = httpx.get(
     "https://ddragon.leagueoflegends.com/api/versions.json").json()[0]
+NUMERAL_MAP: dict[str: int] = {"I": 1, "II": 2, "III": 3, "IV": 4, "V": 5}
 
 intents: Intents = Intents.default()
 intents.message_content = True
@@ -32,15 +33,15 @@ async def send_message(message: Message, user_message: str) -> None:
         print('(Message was empty because intents were not enabled probably)')
         return
 
-    if is_private := user_message[0] == '!':
-        user_message = user_message[1:]
+    # if is_private := user_message[0] == '!':
+    user_message = user_message[1:]
 
     try:
         response: str = get_response(user_message)
-        if is_private:
-            await message.author.send(response)
-        else:
-            await message.channel.send(response)
+        # if is_private:
+        #     await message.author.send(response)
+        # else:
+        await message.channel.send(response)
     except Exception as e:
         print(e)
 
@@ -64,8 +65,8 @@ async def on_ready() -> None:
 async def on_message(message: Message) -> None:
     if message.author == client.user:
         return
-    
-    if not message.content.startswith(client.command_prefix):
+
+    if not message.content.startswith(client.command_prefix or "!"):
         return
 
     username: str = str(message.author)
@@ -74,10 +75,9 @@ async def on_message(message: Message) -> None:
 
     print(f'[{channel}] {username}: "{user_message}"')
     await send_message(message, user_message)
-    
-    # Ensure commands are processed
-    await client.process_commands(message)
 
+    # # Ensure commands are processed
+    # await client.process_commands(message)
 
 
 @client.tree.command(name="opgg")
@@ -88,8 +88,14 @@ async def opgg(interaction: discord.Interaction, username: str, tagline: str = "
         puuid: str = account_body["puuid"]
         summoner_body = await lol_api.get_summoner_by_puuid(puuid)
         mastery_body = await lol_api.get_champion_master_by_puuid(puuid)
-        print(mastery_body)
-        
+        summoner_id: str = summoner_body["id"]
+        league_body = await lol_api.get_league_queues_by_summoner_id(summoner_id)
+        # print(league_body)
+        queue_ranks = {"RANKED_FLEX_SR": None,
+                       "CHERRY": None, "RANKED_SOLO_5x5": None}
+
+        for queue in league_body:
+            queue_ranks[queue["queueType"]] = queue
 
         riot_id = username + "#" + tagline
         profile_icon_id = summoner_body["profileIconId"]
@@ -106,13 +112,23 @@ async def opgg(interaction: discord.Interaction, username: str, tagline: str = "
             color=discord.Color.blue()
         )
         embed.set_thumbnail(url=profile_icon_url)
-        embed.set_footer(text="Profile Icon")
+        embed.add_field(name="Solo",
+                        value=f"{
+                            queue_ranks['RANKED_SOLO_5x5']["tier"].lower().capitalize() if queue_ranks['RANKED_SOLO_5x5'] else "Unranked"} {
+                            NUMERAL_MAP[queue_ranks['RANKED_SOLO_5x5']["rank"]] if queue_ranks['RANKED_SOLO_5x5'] else ""}",
+                        inline=True)
+        embed.add_field(name="Flex",
+                        value=f"{
+                            queue_ranks['RANKED_FLEX_SR']["tier"].lower().capitalize() if queue_ranks['RANKED_FLEX_SR'] else "Unranked"} {
+                            NUMERAL_MAP[queue_ranks['RANKED_FLEX_SR']["rank"]] if queue_ranks['RANKED_FLEX_SR'] else ""}",
+                        inline=True)
+
+        embed.set_footer(text=f"Revision Date: {summoner.revision_date}")
 
         await interaction.response.send_message(embed=embed)
     except httpx.HTTPStatusError as e:
         await interaction.response.send_message(f"Error fetching summoner data")
         print(e)
-
 
 
 def main() -> None:

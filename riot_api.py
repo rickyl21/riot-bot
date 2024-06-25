@@ -33,3 +33,10 @@ class RiotAPI:
             response = await client.get(url, headers=self._get_headers())
             response.raise_for_status()
             return response.json()
+        
+    async def get_league_queues_by_summoner_id(self, summoner_id: str) -> Dict[str, Any]:
+        url = f"{self.base_url}/lol/league/v4/entries/by-summoner/{summoner_id}"
+        async with httpx.AsyncClient() as client:
+            response = await client.get(url, headers=self._get_headers())
+            response.raise_for_status()
+            return response.json()
