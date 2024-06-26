@@ -16,7 +16,6 @@ TOKEN: Final[str] = os.getenv('DISCORD_TOKEN')
 API_KEY: Final[str] = os.getenv('RIOT_API_KEY')
 DDRAGON_VER = httpx.get(
     "https://ddragon.leagueoflegends.com/api/versions.json").json()[0]
-NUMERAL_MAP: dict[str: int] = {"I": 1, "II": 2, "III": 3, "IV": 4, "V": 5}
 
 # Set the base directory for your project using relative paths
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -37,14 +36,10 @@ async def send_message(message: Message, user_message: str) -> None:
         print('(Message was empty because intents were not enabled probably)')
         return
 
-    # if is_private := user_message[0] == '!':
     user_message = user_message[1:]
 
     try:
         response: str = get_response(user_message)
-        # if is_private:
-        #     await message.author.send(response)
-        # else:
         await message.channel.send(response)
     except Exception as e:
         print(e)
@@ -80,9 +75,6 @@ async def on_message(message: Message) -> None:
     print(f'[{channel}] {username}: "{user_message}"')
     await send_message(message, user_message)
 
-    # # Ensure commands are processed
-    # await client.process_commands(message)
-
 
 @client.tree.command(name="opgg")
 @app_commands.describe(username="Riot Username", tagline="#NA1")
@@ -90,10 +82,13 @@ async def opgg(interaction: discord.Interaction, username: str, tagline: str = "
     try:
         account_body = await account_api.get_account_by_riot_id(username, tagline)
         puuid: str = account_body["puuid"]
+        
         summoner_body = await lol_api.get_summoner_by_puuid(puuid)
         mastery_body = await lol_api.get_champion_master_by_puuid(puuid)
+        
         summoner_id: str = summoner_body["id"]
         league_body = await lol_api.get_league_queues_by_summoner_id(summoner_id)
+        
         queue_ranks = {"RANKED_FLEX_SR": None,
                        "CHERRY": None, "RANKED_SOLO_5x5": None}
 
@@ -102,30 +97,24 @@ async def opgg(interaction: discord.Interaction, username: str, tagline: str = "
 
         riot_id = username + "#" + tagline
 
-        summoner = Summoner(summoner_body["id"], summoner_body["accountId"], summoner_body["puuid"],
-                            summoner_body["profileIconId"], summoner_body["revisionDate"], summoner_body["summonerLevel"],
-                            riot_id, queue_ranks)
+        summoner = Summoner(summoner_id, 
+                            summoner_body["accountId"], 
+                            summoner_body["puuid"],
+                            summoner_body["profileIconId"], 
+                            summoner_body["revisionDate"], 
+                            summoner_body["summonerLevel"],
+                            riot_id, 
+                            queue_ranks)
 
-        profile_icon_id = summoner.profile_icon_id
-        profile_icon_url = f"https://ddragon.leagueoflegends.com/cdn/{
-            DDRAGON_VER}/img/profileicon/{profile_icon_id}.png"
+        profile_icon_url = summoner.get_profile_icon_url(ver=DDRAGON_VER)
 
-        solo_tier = summoner.queue_ranks['RANKED_SOLO_5x5']["tier"].lower(
-        ) if summoner.queue_ranks['RANKED_SOLO_5x5'] else "unranked"
-        flex_tier = summoner.queue_ranks['RANKED_FLEX_SR']["tier"].lower(
-        ) if summoner.queue_ranks['RANKED_FLEX_SR'] else "unranked"
+        solo_tier = summoner.get_tier(solo=True)
+        flex_tier = summoner.get_tier(solo=False)
 
-        solo_rank = NUMERAL_MAP[summoner.queue_ranks['RANKED_SOLO_5x5']
-                                ["rank"]] if summoner.queue_ranks['RANKED_SOLO_5x5'] else ""
-        flex_rank = NUMERAL_MAP[summoner.queue_ranks['RANKED_FLEX_SR']
-                                ["rank"]] if summoner.queue_ranks['RANKED_FLEX_SR'] else ""
-
-        if summoner.queue_ranks['RANKED_SOLO_5x5']:
-            ranked_icon_tier = solo_tier
-        elif summoner.queue_ranks["RANKED_FLEX_SR"]:
-            ranked_icon_tier = flex_tier
-        else:
-            ranked_icon_tier = "unranked"
+        solo_rank = summoner.get_rank(solo=True)
+        flex_rank = summoner.get_rank(solo=False)
+            
+        ranked_icon_tier = summoner.get_main_rank()
 
         image_path = os.path.join(ASSETS_DIR, f"{ranked_icon_tier}.png")
         if not os.path.exists(image_path):
