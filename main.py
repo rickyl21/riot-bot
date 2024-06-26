@@ -4,7 +4,7 @@ import discord
 
 from typing import Final
 from dotenv import load_dotenv
-from discord import Intents, Message
+from discord import Intents, Message, File
 from discord import app_commands
 from discord.ext import commands
 from responses import get_response
@@ -17,6 +17,10 @@ API_KEY: Final[str] = os.getenv('RIOT_API_KEY')
 DDRAGON_VER = httpx.get(
     "https://ddragon.leagueoflegends.com/api/versions.json").json()[0]
 NUMERAL_MAP: dict[str: int] = {"I": 1, "II": 2, "III": 3, "IV": 4, "V": 5}
+
+# Set the base directory for your project using relative paths
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+ASSETS_DIR = os.path.join(BASE_DIR, "assets")
 
 intents: Intents = Intents.default()
 intents.message_content = True
@@ -90,7 +94,6 @@ async def opgg(interaction: discord.Interaction, username: str, tagline: str = "
         mastery_body = await lol_api.get_champion_master_by_puuid(puuid)
         summoner_id: str = summoner_body["id"]
         league_body = await lol_api.get_league_queues_by_summoner_id(summoner_id)
-        # print(league_body)
         queue_ranks = {"RANKED_FLEX_SR": None,
                        "CHERRY": None, "RANKED_SOLO_5x5": None}
 
@@ -98,13 +101,36 @@ async def opgg(interaction: discord.Interaction, username: str, tagline: str = "
             queue_ranks[queue["queueType"]] = queue
 
         riot_id = username + "#" + tagline
-        profile_icon_id = summoner_body["profileIconId"]
-        profile_icon_url = f"https://ddragon.leagueoflegends.com/cdn/{
-            DDRAGON_VER}/img/profileicon/{profile_icon_id}.png"
 
         summoner = Summoner(summoner_body["id"], summoner_body["accountId"], summoner_body["puuid"],
                             summoner_body["profileIconId"], summoner_body["revisionDate"], summoner_body["summonerLevel"],
-                            riot_id)
+                            riot_id, queue_ranks)
+
+        profile_icon_id = summoner.profile_icon_id
+        profile_icon_url = f"https://ddragon.leagueoflegends.com/cdn/{
+            DDRAGON_VER}/img/profileicon/{profile_icon_id}.png"
+
+        solo_tier = summoner.queue_ranks['RANKED_SOLO_5x5']["tier"].lower(
+        ) if summoner.queue_ranks['RANKED_SOLO_5x5'] else "unranked"
+        flex_tier = summoner.queue_ranks['RANKED_FLEX_SR']["tier"].lower(
+        ) if summoner.queue_ranks['RANKED_FLEX_SR'] else "unranked"
+
+        solo_rank = NUMERAL_MAP[summoner.queue_ranks['RANKED_SOLO_5x5']
+                                ["rank"]] if summoner.queue_ranks['RANKED_SOLO_5x5'] else ""
+        flex_rank = NUMERAL_MAP[summoner.queue_ranks['RANKED_FLEX_SR']
+                                ["rank"]] if summoner.queue_ranks['RANKED_FLEX_SR'] else ""
+
+        if summoner.queue_ranks['RANKED_SOLO_5x5']:
+            ranked_icon_tier = solo_tier
+        elif summoner.queue_ranks["RANKED_FLEX_SR"]:
+            ranked_icon_tier = flex_tier
+        else:
+            ranked_icon_tier = "unranked"
+
+        image_path = os.path.join(ASSETS_DIR, f"{ranked_icon_tier}.png")
+        if not os.path.exists(image_path):
+            image_path = os.path.join(ASSETS_DIR, "unranked.png")
+        rank_image = File(image_path, filename="rank_emblem.png")
 
         embed = discord.Embed(
             title=f"{summoner.riot_id}",
@@ -112,20 +138,14 @@ async def opgg(interaction: discord.Interaction, username: str, tagline: str = "
             color=discord.Color.blue()
         )
         embed.set_thumbnail(url=profile_icon_url)
-        embed.add_field(name="Solo",
-                        value=f"{
-                            queue_ranks['RANKED_SOLO_5x5']["tier"].lower().capitalize() if queue_ranks['RANKED_SOLO_5x5'] else "Unranked"} {
-                            NUMERAL_MAP[queue_ranks['RANKED_SOLO_5x5']["rank"]] if queue_ranks['RANKED_SOLO_5x5'] else ""}",
-                        inline=True)
-        embed.add_field(name="Flex",
-                        value=f"{
-                            queue_ranks['RANKED_FLEX_SR']["tier"].lower().capitalize() if queue_ranks['RANKED_FLEX_SR'] else "Unranked"} {
-                            NUMERAL_MAP[queue_ranks['RANKED_FLEX_SR']["rank"]] if queue_ranks['RANKED_FLEX_SR'] else ""}",
-                        inline=True)
-
+        embed.add_field(name="Solo", value=f"{solo_tier.capitalize()} {
+                        solo_rank}", inline=True)
+        embed.add_field(name="Flex", value=f"{flex_tier.capitalize()} {
+                        flex_rank}", inline=True)
+        embed.set_image(url="attachment://rank_emblem.png")
         embed.set_footer(text=f"Revision Date: {summoner.revision_date}")
 
-        await interaction.response.send_message(embed=embed)
+        await interaction.response.send_message(embed=embed, file=rank_image)
     except httpx.HTTPStatusError as e:
         await interaction.response.send_message(f"Error fetching summoner data")
         print(e)
