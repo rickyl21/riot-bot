@@ -40,3 +40,10 @@ class RiotAPI:
             response = await client.get(url, headers=self._get_headers())
             response.raise_for_status()
             return response.json()
+        
+    async def get_current_game_by_puuid(self, puuid: str) -> Dict[str, Any]:
+        url = f"{self.base_url}/lol/spectator/v5/active-games/by-summoner/{puuid}"
+        async with httpx.AsyncClient() as client:
+            response = await client.get(url, headers=self._get_headers())
+            response.raise_for_status()
+            return response.json()

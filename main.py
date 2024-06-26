@@ -10,6 +10,7 @@ from discord.ext import commands
 from responses import get_response
 from riot_api import RiotAPI
 from summoner import Summoner
+from helpers import Helpers
 
 load_dotenv()
 TOKEN: Final[str] = os.getenv('DISCORD_TOKEN')
@@ -89,6 +90,16 @@ async def opgg(interaction: discord.Interaction, username: str, tagline: str = "
         summoner_id: str = summoner_body["id"]
         league_body = await lol_api.get_league_queues_by_summoner_id(summoner_id)
         
+        current_game_body = None
+        try:
+            current_game_body = await lol_api.get_current_game_by_puuid(puuid)
+        except httpx.HTTPStatusError as e:
+            if e.response.status_code == 404:
+                print(f"No current game found for {puuid}")
+            else:
+                raise
+        print(current_game_body)
+        
         queue_ranks = {"RANKED_FLEX_SR": None,
                        "CHERRY": None, "RANKED_SOLO_5x5": None}
 
@@ -136,8 +147,11 @@ async def opgg(interaction: discord.Interaction, username: str, tagline: str = "
 
         await interaction.response.send_message(embed=embed, file=rank_image)
     except httpx.HTTPStatusError as e:
-        await interaction.response.send_message(f"Error fetching summoner data")
-        print(e)
+        await interaction.response.send_message("Error fetching summoner data")
+        print(f"HTTP Status Error: {e}")
+    except Exception as e:
+        await interaction.response.send_message("An unexpected error occurred")
+        print(f"Unexpected error: {e}")
 
 
 def main() -> None:
